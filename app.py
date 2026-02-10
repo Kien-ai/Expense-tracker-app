@@ -12,6 +12,15 @@ import io
 st.set_page_config(page_title="💰 Expense Tracker", page_icon="💰", layout="wide")
 st.title("💰 Expense Tracker with Insights")
 st.write("You can **upload a CSV** or **enter your expenses manually**.")
+st.sidebar.title("Settings")
+
+n_clusters = st.sidebar.slider(
+    "Select number of clusters",
+    min_value=2,
+    max_value=6,
+    value=3
+)
+
 
 # -----------------------------
 # Sample CSV
