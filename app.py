@@ -1,3 +1,6 @@
+# =============================
+# IMPORTS
+# =============================
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,198 +9,206 @@ from sklearn.cluster import KMeans
 from sklearn.linear_model import LinearRegression
 import io
 
-# -----------------------------
-# App Configuration
-# -----------------------------
-st.set_page_config(page_title="💰 Expense Tracker", page_icon="💰", layout="wide")
+# =============================
+# PAGE CONFIG
+# =============================
+st.set_page_config(
+    page_title="💰 Expense Tracker",
+    page_icon="💰",
+    layout="wide"
+)
+
 st.title("💰 Expense Tracker with Insights")
-st.write("You can **upload a CSV** or **enter your expenses manually**.")
-st.sidebar.title("Settings")
+st.write("Upload a CSV or enter your expenses manually.")
+
+# =============================
+# SIDEBAR CONTROLS (ALWAYS DEFINED)
+# =============================
+st.sidebar.header("Settings")
 
 n_clusters = st.sidebar.slider(
-    "Select number of clusters",
+    "Number of spending clusters",
     min_value=2,
     max_value=6,
     value=3
 )
 
+show_budget = st.sidebar.checkbox(
+    "Show next month budget prediction",
+    value=True
+)
 
-# -----------------------------
-# Sample CSV
-# -----------------------------
+input_mode = st.sidebar.radio(
+    "Input method",
+    ["Upload CSV", "Manual Input"]
+)
+
+# =============================
+# SAMPLE DATA (FALLBACK)
+# =============================
 sample_data = """Date,Category,Amount
 2026-01-01,Food,20
 2026-01-02,Transport,15
 2026-01-03,Entertainment,50
+2026-02-01,Food,30
+2026-02-05,Rent,400
+2026-03-03,Utilities,80
 """
 
-# -----------------------------
-# Input Options
-# -----------------------------
-st.sidebar.title("Input Options")
-input_mode = st.sidebar.radio("Select input method:", ["Upload CSV", "Manual Input"])
-show_budget = st.sidebar.checkbox("Show next month budget", True)
-n_clusters = st.sidebar.slider("Select number of clusters", 2, 6, 3)
-
+# =============================
+# LOAD DATA
+# =============================
 df = None
 
-# -----------------------------
-# CSV Upload
-# -----------------------------
 if input_mode == "Upload CSV":
-    file = st.sidebar.file_uploader("Upload CSV", type="csv")
+    file = st.file_uploader("Upload CSV file", type="csv")
     if file is None:
-        st.info("Using sample data for demonstration")
-        file = io.StringIO(sample_data)
-    try:
-        df = pd.read_csv(file)
-    except Exception as e:
-        st.error(f"Error reading CSV: {e}")
-        st.stop()
-
-# -----------------------------
-# Manual Input
-# -----------------------------
-elif input_mode == "Manual Input":
-    st.subheader("Enter your expenses")
-    st.write("Use the table below to add your data (Date, Category, Amount)")
-    empty_df = pd.DataFrame(columns=["Date", "Category", "Amount"])
-    df = st.data_editor(empty_df, num_rows="dynamic")
-    if df.empty:
-        st.info("No data entered yet. Using sample data for demo.")
+        st.info("Using sample data")
         df = pd.read_csv(io.StringIO(sample_data))
+    else:
+        df = pd.read_csv(file)
 
-# -----------------------------
-# Preprocess Data
-# -----------------------------
-df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-df = df.dropna(subset=['Date', 'Amount'])
-df = df[df['Amount'] > 0]
-df['Month'] = df['Date'].dt.to_period('M')
+else:  # Manual Input
+    st.subheader("Enter your expenses")
+    editor_df = st.data_editor(
+        pd.DataFrame(columns=["Date", "Category", "Amount"]),
+        num_rows="dynamic"
+    )
+    if editor_df.empty:
+        st.info("Using sample data")
+        df = pd.read_csv(io.StringIO(sample_data))
+    else:
+        df = editor_df.copy()
 
-# -----------------------------
-# Quick Metrics
-# -----------------------------
-total_spent = df['Amount'].sum()
-average_daily = df['Amount'].mean()
-num_categories = len(df['Category'].unique())
+# =============================
+# DATA CLEANING
+# =============================
+df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
+
+df = df.dropna(subset=["Date", "Amount"])
+df = df[df["Amount"] > 0]
+
+df["Month"] = df["Date"].dt.to_period("M")
+
+# =============================
+# METRICS
+# =============================
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Spent", f"${total_spent:,.2f}")
-col2.metric("Average Daily Spend", f"${average_daily:,.2f}")
-col3.metric("Number of Categories", num_categories)
-st.markdown("---")
 
-# -----------------------------
-# Spending by Category
-# -----------------------------
-category_sum = df.groupby('Category')['Amount'].sum().sort_values(ascending=False)
-st.markdown("## 📊 Spending by Category")
+col1.metric("Total Spent", f"${df['Amount'].sum():,.2f}")
+col2.metric("Average Expense", f"${df['Amount'].mean():,.2f}")
+col3.metric("Categories", df["Category"].nunique())
+
+st.divider()
+
+# =============================
+# SPENDING BY CATEGORY
+# =============================
+st.subheader("📊 Spending by Category")
+category_sum = df.groupby("Category")["Amount"].sum().sort_values(ascending=False)
+
 fig1, ax1 = plt.subplots()
-colors = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC949", "#AF7AA1"]
-category_sum.plot(kind='bar', color=colors[:len(category_sum)], ax=ax1)
-ax1.set_ylabel("Amount ($)")
-ax1.set_xlabel("Category")
-ax1.set_title("Total Spending by Category")
+category_sum.plot(kind="bar", ax=ax1)
+ax1.set_ylabel("Amount")
 st.pyplot(fig1)
-st.markdown("---")
 
-# -----------------------------
-# Monthly Spending Trend
-# -----------------------------
-monthly_sum = df.groupby('Month')['Amount'].sum()
-st.markdown("## 📈 Monthly Spending Trend")
+st.divider()
+
+# =============================
+# MONTHLY TREND
+# =============================
+st.subheader("📈 Monthly Spending Trend")
+monthly_sum = df.groupby("Month")["Amount"].sum()
+
 fig2, ax2 = plt.subplots()
-monthly_sum.plot(kind='line', marker='o', color='#59A14F', ax=ax2)
-ax2.set_ylabel("Amount ($)")
-ax2.set_xlabel("Month")
-ax2.set_title("Monthly Spending Trend")
+monthly_sum.plot(marker="o", ax=ax2)
+ax2.set_ylabel("Amount")
 st.pyplot(fig2)
-st.markdown("---")
 
-# -----------------------------
-# Spending Distribution Pie
-# -----------------------------
-st.markdown("## 🥧 Spending Distribution by Category")
-fig3, ax3 = plt.subplots()
-category_sum.plot(kind='pie', autopct='%1.1f%%', startangle=90, ax=ax3, legend=False, colors=colors[:len(category_sum)])
-ax3.set_ylabel("")
-st.pyplot(fig3)
-st.markdown("---")
+st.divider()
 
-# -----------------------------
-# Spending Type Clustering
-# -----------------------------
-monthly_cat = df.groupby(['Month', 'Category'])['Amount'].sum().unstack().fillna(0)
+# =============================
+# CLUSTERING (SAFE)
+# =============================
+st.subheader("🏷️ Spending Type by Month")
+
+monthly_cat = (
+    df.groupby(["Month", "Category"])["Amount"]
+    .sum()
+    .unstack()
+    .fillna(0)
+)
 
 if len(monthly_cat) < 2:
-    st.warning("Not enough data to perform clustering.")
+    st.warning("Not enough data for clustering.")
 else:
-    if "n_clusters" not in locals():
-        n_clusters = 3
-
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(monthly_cat)
 
     actual_clusters = min(n_clusters, len(monthly_cat))
 
     if actual_clusters < n_clusters:
-        st.warning(
-            f"Reduced clusters to {actual_clusters} "
-            f"(only {len(monthly_cat)} months available)"
-        )
+        st.info(f"Clusters reduced to {actual_clusters}")
 
-    kmeans = KMeans(n_clusters=actual_clusters, random_state=42)
+    kmeans = KMeans(
+        n_clusters=actual_clusters,
+        random_state=42,
+        n_init=10
+    )
+
     monthly_cat["Cluster"] = kmeans.fit_predict(X_scaled)
-
-    monthly_cat["Spending_Type"] = (
+    monthly_cat["Spending Type"] = (
         "Cluster " + (monthly_cat["Cluster"] + 1).astype(str)
     )
 
-    st.subheader("🏷️ Spending Type by Month")
-    st.dataframe(monthly_cat[["Spending_Type"]])
+    st.dataframe(monthly_cat[["Spending Type"]])
 
+st.divider()
 
-# -----------------------------
-# Budget Prediction
-# -----------------------------
+# =============================
+# BUDGET PREDICTION
+# =============================
 if show_budget:
-    monthly_total = df.groupby('Month')['Amount'].sum().reset_index()
-    monthly_total['Month_Num'] = range(1, len(monthly_total) + 1)
+    st.subheader("💵 Estimated Next Month Spending")
+
+    monthly_total = df.groupby("Month")["Amount"].sum().reset_index()
+    monthly_total["Month_Num"] = range(1, len(monthly_total) + 1)
+
     if len(monthly_total) > 1:
-        X = monthly_total[['Month_Num']]
-        y = monthly_total['Amount']
+        X = monthly_total[["Month_Num"]]
+        y = monthly_total["Amount"]
+
         model = LinearRegression()
         model.fit(X, y)
-        next_month_df = pd.DataFrame({'Month_Num': [monthly_total['Month_Num'].max() + 1]})
-        predicted_budget = model.predict(next_month_df)
-        st.markdown("## 💵 Estimated Next Month Spending")
-        st.write(f"${predicted_budget[0]:,.2f}")
-st.markdown("---")
 
-# -----------------------------
-# Top 5 Expenses
-# -----------------------------
-st.markdown("## ⚡ Top 5 Expenses")
-top_expenses = df.sort_values(by='Amount', ascending=False).head(5)
-st.table(top_expenses[['Date', 'Category', 'Amount']])
-st.markdown("---")
+        next_month = pd.DataFrame(
+            {"Month_Num": [monthly_total["Month_Num"].max() + 1]}
+        )
 
-# -----------------------------
-# Download Filtered Data
-# -----------------------------
-st.markdown("## 💾 Download Your Data")
-csv = df.to_csv(index=False).encode('utf-8')
-st.download_button("Download CSV", data=csv, file_name='filtered_expenses.csv', mime='text/csv')
-st.markdown("---")
+        prediction = model.predict(next_month)[0]
+        st.success(f"Estimated next month spend: ${prediction:,.2f}")
+    else:
+        st.info("Not enough data to predict budget")
 
-# -----------------------------
-# High Spending Outliers
-# -----------------------------
-threshold = df['Amount'].mean() + 2 * df['Amount'].std()
-outliers = df[df['Amount'] > threshold]
-if not outliers.empty:
-    st.markdown("## 🚨 High Spending Alerts")
-    st.dataframe(outliers[['Date', 'Category', 'Amount']].style.apply(
-        lambda x: ['background-color: #FFDDDD' if v > threshold else '' for v in x['Amount']], axis=1
-    ))
+st.divider()
+
+# =============================
+# TOP EXPENSES
+# =============================
+st.subheader("⚡ Top 5 Expenses")
+st.table(
+    df.sort_values("Amount", ascending=False)
+      .head(5)[["Date", "Category", "Amount"]]
+)
+
+# =============================
+# DOWNLOAD
+# =============================
+st.subheader("💾 Download Data")
+st.download_button(
+    "Download CSV",
+    df.to_csv(index=False),
+    "expenses_cleaned.csv",
+    "text/csv"
+)
