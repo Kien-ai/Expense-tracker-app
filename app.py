@@ -129,25 +129,34 @@ st.markdown("---")
 # Spending Type Clustering
 # -----------------------------
 monthly_cat = df.groupby(['Month', 'Category'])['Amount'].sum().unstack().fillna(0)
-if len(monthly_cat) == 0:
+
+if len(monthly_cat) < 2:
     st.warning("Not enough data to perform clustering.")
 else:
+    if "n_clusters" not in locals():
+        n_clusters = 3
+
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(monthly_cat)
 
     actual_clusters = min(n_clusters, len(monthly_cat))
+
     if actual_clusters < n_clusters:
-        st.warning(f"Reduced number of clusters to {actual_clusters} because there are only {len(monthly_cat)} months of data.")
+        st.warning(
+            f"Reduced clusters to {actual_clusters} "
+            f"(only {len(monthly_cat)} months available)"
+        )
 
     kmeans = KMeans(n_clusters=actual_clusters, random_state=42)
-    clusters = kmeans.fit_predict(X_scaled)
-    monthly_cat['Cluster'] = clusters
-    cluster_names = {i: f"Type {i+1}" for i in range(actual_clusters)}
-    monthly_cat['Spending_Type'] = monthly_cat['Cluster'].map(cluster_names)
+    monthly_cat["Cluster"] = kmeans.fit_predict(X_scaled)
 
-    st.markdown("## 🏷️ Spending Type by Month")
-    st.dataframe(monthly_cat[['Spending_Type']])
-st.markdown("---")
+    monthly_cat["Spending_Type"] = (
+        "Cluster " + (monthly_cat["Cluster"] + 1).astype(str)
+    )
+
+    st.subheader("🏷️ Spending Type by Month")
+    st.dataframe(monthly_cat[["Spending_Type"]])
+
 
 # -----------------------------
 # Budget Prediction
