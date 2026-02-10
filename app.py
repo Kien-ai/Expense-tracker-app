@@ -125,10 +125,15 @@ monthly_cat = df.groupby(['Month', 'Category'])['Amount'].sum().unstack().fillna
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(monthly_cat)
 
-kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+# Ensure n_clusters <= number of samples
+actual_clusters = min(n_clusters, len(monthly_cat))
+if actual_clusters < n_clusters:
+    st.warning(f"Reduced number of clusters to {actual_clusters} because there are only {len(monthly_cat)} months of data.")
+
+kmeans = KMeans(n_clusters=actual_clusters, random_state=42)
 clusters = kmeans.fit_predict(X_scaled)
 monthly_cat['Cluster'] = clusters
-cluster_names = {i: f"Type {i+1}" for i in range(n_clusters)}
+cluster_names = {i: f"Type {i+1}" for i in range(actual_clusters)}
 monthly_cat['Spending_Type'] = monthly_cat['Cluster'].map(cluster_names)
 
 st.markdown("## 🏷️ Spending Type by Month")
