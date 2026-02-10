@@ -6,12 +6,17 @@ from sklearn.cluster import KMeans
 from sklearn.linear_model import LinearRegression
 import io
 
-# -----------------------------
-# App Configuration
-# -----------------------------
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.linear_model import LinearRegression
+import io
+
 st.set_page_config(page_title="💰 Expense Tracker", page_icon="💰", layout="wide")
 st.title("💰 Expense Tracker with Insights")
-st.write("Upload your expenses CSV and explore your spending patterns interactively.")
+st.write("You can **upload a CSV** or **enter your expenses manually**.")
 
 # -----------------------------
 # Sample CSV (Fallback)
@@ -20,31 +25,41 @@ sample_data = """Date,Category,Amount
 2026-01-01,Food,20
 2026-01-02,Transport,15
 2026-01-03,Entertainment,50
-2026-01-04,Food,30
-2026-01-05,Bills,60
-2026-01-06,Shopping,45
 """
 
 # -----------------------------
-# Sidebar: Upload & Filters
+# Input Options
 # -----------------------------
-st.sidebar.title("Upload & Settings")
-file = st.sidebar.file_uploader("Upload CSV", type="csv")
-show_budget = st.sidebar.checkbox("Show next month budget", True)
-n_clusters = st.sidebar.slider("Select number of clusters", 2, 6, 3)
+st.sidebar.title("Input Options")
+input_mode = st.sidebar.radio("Select input method:", ["Upload CSV", "Manual Input"])
+
+df = None
 
 # -----------------------------
-# Load Data
+# CSV Upload
 # -----------------------------
-if file is None:
-    st.warning("No file uploaded. Using sample data for demonstration.")
-    file = io.StringIO(sample_data)
+if input_mode == "Upload CSV":
+    file = st.sidebar.file_uploader("Upload CSV", type="csv")
+    if file is None:
+        st.info("Using sample data for demonstration")
+        file = io.StringIO(sample_data)
+    try:
+        df = pd.read_csv(file)
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
+        st.stop()
 
-try:
-    df = pd.read_csv(file)
-except Exception as e:
-    st.error(f"Error reading CSV: {e}")
-    st.stop()
+# -----------------------------
+# Manual Input
+# -----------------------------
+elif input_mode == "Manual Input":
+    st.subheader("Enter your expenses")
+    st.write("Use the table below to add your data (Date, Category, Amount)")
+    empty_df = pd.DataFrame(columns=["Date", "Category", "Amount"])
+    df = st.data_editor(empty_df, num_rows="dynamic")
+    if df.empty:
+        st.info("No data entered yet. Using sample data for demo.")
+        df = pd.read_csv(io.StringIO(sample_data))
 
 # -----------------------------
 # Preprocess Data
@@ -56,14 +71,15 @@ df = df[df['Amount'] > 0]
 df['Month'] = df['Date'].dt.to_period('M')
 
 # -----------------------------
-# Sidebar: Category Filter
+# Your existing app code continues here
 # -----------------------------
-categories = df['Category'].unique().tolist()
-selected_categories = st.sidebar.multiselect(
-    "Select Categories to include", options=categories, default=categories
-)
-if selected_categories:
-    df = df[df['Category'].isin(selected_categories)]
+# Quick metrics, charts, clustering, budget prediction, etc.
+# (reuse the polished code from your previous app)
+
+st.write("✅ Data is loaded successfully. You can now continue with analysis and visualizations.")
+
+
+# -----------------------------
 
 # -----------------------------
 # Quick Metrics
