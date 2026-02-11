@@ -1,204 +1,71 @@
 import streamlit as st
-import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.linear_model import LinearRegression
+from utils.auth import signup_user, login_user
+from utils.data_manager import load_user_data, save_user_data
+
+st.set_page_config("Expense Tracker", layout="wide")
 
 # -----------------------------
-# Page config
+# Session defaults
 # -----------------------------
-st.set_page_config(
-    page_title="Expense Tracker",
-    page_icon="💰",
-    layout="wide"
-)
-
-PRIMARY = "#4E79A7"
-SUCCESS = "#59A14F"
-WARNING = "#E15759"
-ACCENT = "#EDC949"
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
 # -----------------------------
-# App title
+# AUTH PAGE
 # -----------------------------
-st.title("💰 Smart Expense Tracker")
-st.caption("Understand your spending • Spot trends • Plan better")
+if not st.session_state.authenticated:
+    st.title("💰 Expense Tracker")
 
-st.markdown("---")
+    tab1, tab2 = st.tabs(["Login", "Sign Up"])
 
-# -----------------------------
-# Sidebar – User-friendly
-# -----------------------------
-st.sidebar.header("⚙️ Controls")
+    with tab1:
+        st.subheader("Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if login_user(username, password):
+                st.session_state.authenticated = True
+                st.session_state.user = username
+                st.session_state.df = load_user_data(username)
+                st.success("Login successful")
+                st.rerun()
+            else:
+                st.error("Invalid username or password")
 
-input_mode = st.sidebar.radio(
-    "How would you like to add data?",
-    ["Upload CSV", "Manual Entry"]
-)
+    with tab2:
+        st.subheader("Create Account")
+        new_user = st.text_input("New Username")
+        new_pass = st.text_input("New Password", type="password")
+        if st.button("Sign Up"):
+            if signup_user(new_user, new_pass):
+                st.success("Account created. You can now log in.")
+            else:
+                st.error("Username already exists")
 
-show_insights = st.sidebar.checkbox("Show smart insights", value=True)
-show_prediction = st.sidebar.checkbox("Estimate next month spending", value=True)
-
-# -----------------------------
-# Data input
-# -----------------------------
-df = None
-
-if input_mode == "Upload CSV":
-    file = st.file_uploader("📤 Upload your expense CSV", type="csv")
-    if file:
-        df = pd.read_csv(file)
-
-else:
-    st.subheader("✍️ Add an Expense")
-    with st.form("manual_entry"):
-        date = st.date_input("Date")
-        category = st.text_input("Category")
-        amount = st.number_input("Amount", min_value=0.0, step=1.0)
-        submitted = st.form_submit_button("Add Expense")
-
-        if submitted:
-            df = pd.DataFrame([{
-                "Date": date,
-                "Category": category,
-                "Amount": amount
-            }])
-
-# -----------------------------
-# Stop if no data
-# -----------------------------
-if df is None or df.empty:
-    st.info("👈 Upload a CSV or add expenses to get started")
     st.stop()
 
 # -----------------------------
-# Data cleaning
+# MAIN APP (AFTER LOGIN)
 # -----------------------------
-df["Date"] = pd.to_datetime(df["Date"])
-df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce")
-df = df.dropna()
-df = df[df["Amount"] > 0]
-df["Month"] = df["Date"].dt.to_period("M").astype(str)
+st.sidebar.success(f"Logged in as {st.session_state.user}")
 
-# -----------------------------
-# Filters
-# -----------------------------
-st.sidebar.subheader("📅 Filters")
-
-months = sorted(df["Month"].unique())
-categories = sorted(df["Category"].unique())
-
-selected_months = st.sidebar.multiselect(
-    "Select months",
-    months,
-    default=months
+page = st.sidebar.radio(
+    "Navigation",
+    ["Upload Data", "Add Expense", "Dashboard", "Insights", "Reports"]
 )
 
-selected_categories = st.sidebar.multiselect(
-    "Select categories",
-    categories,
-    default=categories
-)
+if page == "Upload Data":
+    import pages.upload_data
+elif page == "Add Expense":
+    import pages.add_expense
+elif page == "Dashboard":
+    import pages.dashboard
+elif page == "Insights":
+    import pages.insights
+elif page == "Reports":
+    import pages.reports
 
-df = df[
-    df["Month"].isin(selected_months)
-    & df["Category"].isin(selected_categories)
-]
-
-# -----------------------------
-# Overview metrics
-# -----------------------------
-st.subheader("📊 Overview")
-
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Spent", f"${df['Amount'].sum():,.2f}")
-col2.metric("Average Expense", f"${df['Amount'].mean():,.2f}")
-col3.metric("Number of Transactions", len(df))
-
-st.markdown("---")
-
-# -----------------------------
-# Spending by Category
-# -----------------------------
-st.subheader("🗂️ Spending by Category")
-
-category_sum = df.groupby("Category")["Amount"].sum().sort_values()
-
-fig1, ax1 = plt.subplots()
-category_sum.plot(kind="barh", ax=ax1, color=PRIMARY)
-ax1.set_xlabel("Amount ($)")
-ax1.set_ylabel("")
-st.pyplot(fig1)
-
-# -----------------------------
-# Monthly Trend
-# -----------------------------
-st.subheader("📈 Monthly Spending Trend")
-
-monthly_sum = df.groupby("Month")["Amount"].sum()
-
-fig2, ax2 = plt.subplots()
-monthly_sum.plot(marker="o", ax=ax2, color=SUCCESS)
-ax2.set_xlabel("Month")
-ax2.set_ylabel("Amount ($)")
-st.pyplot(fig2)
-
-st.markdown("---")
-
-# -----------------------------
-# Smart insights (plain English)
-# -----------------------------
-if show_insights:
-    st.subheader("💡 Smart Insights")
-
-    top_category = category_sum.idxmax()
-    top_month = monthly_sum.idxmax()
-
-    st.info(f"📌 You spent the most on **{top_category}**.")
-    st.info(f"📅 Your highest spending month was **{top_month}**.")
-
-    threshold = df["Amount"].mean() + 2 * df["Amount"].std()
-    outliers = df[df["Amount"] > threshold]
-
-    if not outliers.empty:
-        st.warning("🚨 Some expenses are unusually high:")
-        st.dataframe(outliers[["Date", "Category", "Amount"]])
-
-st.markdown("---")
-
-# -----------------------------
-# Budget prediction
-# -----------------------------
-if show_prediction and len(monthly_sum) > 1:
-    st.subheader("🔮 Estimated Next Month Spending")
-
-    monthly_df = monthly_sum.reset_index()
-    monthly_df["Month_Num"] = range(1, len(monthly_df) + 1)
-
-    X = monthly_df[["Month_Num"]]
-    y = monthly_df["Amount"]
-
-    model = LinearRegression()
-    model.fit(X, y)
-
-    next_month = pd.DataFrame(
-        {"Month_Num": [monthly_df["Month_Num"].max() + 1]}
-    )
-    prediction = model.predict(next_month)
-
-    st.success(f"💰 Estimated spending next month: **${prediction[0]:,.2f}**")
-
-# -----------------------------
-# Download data
-# -----------------------------
-st.markdown("---")
-st.subheader("💾 Download")
-
-csv = df.to_csv(index=False).encode("utf-8")
-st.download_button(
-    "Download filtered data",
-    csv,
-    "filtered_expenses.csv",
-    "text/csv"
-)
+if st.sidebar.button("Save & Logout"):
+    save_user_data(st.session_state.user, st.session_state.df)
+    st.session_state.clear()
+    st.rerun()
