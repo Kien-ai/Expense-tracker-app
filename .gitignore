@@ -1,0 +1,4 @@
+error_log.txt
+.ipynb_checkpoints/
+__pycache__/
+*.log
